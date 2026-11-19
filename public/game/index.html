@@ -1,0 +1,1384 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Fruit Ninja</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            color: white;
+            background: linear-gradient(
+                135deg,
+                #101642,
+                #27105b,
+                #061c36
+            );
+        }
+
+        #game {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud {
+            position: absolute;
+            top: 24px;
+            left: 28px;
+            right: 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2;
+            font-size: clamp(18px, 3vw, 30px);
+            font-weight: bold;
+            pointer-events: none;
+        }
+
+        .score {
+            padding: 12px 22px;
+            border: 2px solid #ffffff55;
+            border-radius: 18px;
+            background: #ffffff18;
+            transition: transform 120ms ease, color 120ms ease,
+                box-shadow 120ms ease;
+        }
+
+        .score.pop {
+            transform: scale(1.14);
+            color: #ffe66d;
+            box-shadow: 0 0 26px #ffe66d99;
+        }
+
+        .center-panel {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 24px;
+            z-index: 3;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: clamp(36px, 7vw, 76px);
+            color: #ffe66d;
+            text-shadow: 0 0 24px #ff6b35;
+        }
+
+        .subtitle {
+            max-width: 600px;
+            margin-bottom: 28px;
+            font-size: clamp(16px, 2.5vw, 24px);
+            line-height: 1.5;
+        }
+
+        button {
+            padding: 18px 42px;
+            border: none;
+            border-radius: 50px;
+            color: #171331;
+            background: linear-gradient(
+                135deg,
+                #ffe66d,
+                #ff9f43
+            );
+            font-size: 23px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 8px 30px #ff9f4355;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        .status {
+            margin-top: 20px;
+            color: #b7f7ff;
+            font-size: 15px;
+        }
+
+        #countdown {
+            position: absolute;
+            inset: 0;
+            z-index: 4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        #countdown[hidden] {
+            display: none;
+        }
+
+        #countdown span {
+            display: block;
+            font-size: clamp(90px, 20vw, 220px);
+            font-weight: bold;
+            color: #ffe66d;
+            text-shadow: 0 0 40px #ff9f43, 0 0 90px #ff6b35;
+            animation: countPop 0.75s ease-out forwards;
+        }
+
+        #countdown span.go {
+            color: #9effa1;
+            text-shadow: 0 0 40px #57d98a, 0 0 90px #1f9d55;
+        }
+
+        @keyframes countPop {
+            0% {
+                transform: scale(0.45);
+                opacity: 0;
+            }
+
+            28% {
+                transform: scale(1.15);
+                opacity: 1;
+            }
+
+            70% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1.4);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <main id="game">
+
+        <canvas id="canvas"></canvas>
+
+        <header class="hud">
+            <div>🍉 AIR FRUIT NINJA</div>
+
+            <div class="score">
+                SCORE: <span id="score">0</span>
+            </div>
+        </header>
+
+        <section class="center-panel" id="menu">
+
+            <h1>Air Fruit Ninja</h1>
+
+            <p class="subtitle">
+                Get ready to slice!<br>
+                Your living-room arcade adventure starts here.
+            </p>
+
+            <button id="startButton">
+                LET'S PLAY!
+            </button>
+
+            <div class="status" id="status">
+                Initial game screen ready
+            </div>
+
+        </section>
+
+        <div id="countdown" hidden></div>
+
+    </main>
+
+    <script>
+
+        // ==========================================
+        // 1. GAME ELEMENTS
+        // ==========================================
+
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+
+        const menu = document.getElementById("menu");
+        const startButton = document.getElementById("startButton");
+        const scoreElement = document.getElementById("score");
+        const statusElement = document.getElementById("status");
+        const countdownElement = document.getElementById("countdown");
+
+        // ==========================================
+        // 2. WEBSOCKET CONNECTION
+        // ==========================================
+
+        const SERVER_URL =
+            `wss://${window.location.hostname}:3000`;
+
+        let socket = null;
+        let reconnectTimer = null;
+
+        function connectToServer() {
+
+            if (
+                socket &&
+                (
+                    socket.readyState === WebSocket.OPEN ||
+                    socket.readyState === WebSocket.CONNECTING
+                )
+            ) {
+                return;
+            }
+
+            const currentSocket = new WebSocket(SERVER_URL);
+            socket = currentSocket;
+
+            currentSocket.addEventListener("open", () => {
+
+                if (socket !== currentSocket) return;
+
+                statusElement.textContent =
+                    "Connected to game server";
+
+                console.log("Game WebSocket connected");
+            });
+
+            currentSocket.addEventListener("message", (event) => {
+
+                if (socket !== currentSocket) return;
+
+                try {
+
+                    const message = JSON.parse(event.data);
+
+                    if (message.type !== "MOVEMENT_TEST") {
+                        return;
+                    }
+
+                    // The controller reports when the hand
+                    // leaves the camera frame.
+                    if (message.hand_detected === false) {
+
+                        phoneMarkerVisible = false;
+
+                        resetTrail();
+
+                        return;
+                    }
+
+                    if (
+                        message.hand_detected === true &&
+                        Number.isFinite(message.x) &&
+                        Number.isFinite(message.y)
+                    ) {
+
+                        const x = Math.max(
+                            0,
+                            Math.min(1, message.x)
+                        );
+
+                        const y = Math.max(
+                            0,
+                            Math.min(1, message.y)
+                        );
+
+                        updatePhonePosition(
+                            x * innerWidth,
+                            y * innerHeight
+                        );
+                    }
+
+                } catch (error) {
+                    console.error(
+                        "Invalid server message:",
+                        error
+                    );
+                }
+            });
+
+            currentSocket.addEventListener("close", () => {
+
+                if (socket !== currentSocket) return;
+
+                statusElement.textContent =
+                    "Disconnected from server";
+
+                phoneMarkerVisible = false;
+
+                resetTrail();
+
+                clearTimeout(reconnectTimer);
+
+                reconnectTimer = setTimeout(() => {
+
+                    if (socket === currentSocket) {
+                        socket = null;
+                        connectToServer();
+                    }
+
+                }, 1500);
+            });
+
+            currentSocket.addEventListener("error", (error) => {
+                console.error("WebSocket error:", error);
+            });
+        }
+
+        // ==========================================
+        // 3. GAME STATE
+        // ==========================================
+
+        let fruits = [];
+        let slicedPieces = [];
+        let particles = [];
+        let scorePopups = [];
+
+        let running = false;
+
+        let score = 0;
+        let lastSpawn = 0;
+
+        let phoneX = 0;
+        let phoneY = 0;
+        let phoneMarkerVisible = false;
+
+        const fruitTypes = [
+            { emoji: "🍉", color: "#ff5263" },
+            { emoji: "🍊", color: "#ffad42" },
+            { emoji: "🍎", color: "#ff4d67" },
+            { emoji: "🍍", color: "#ffe66d" },
+            { emoji: "🥝", color: "#9ee65c" }
+        ];
+
+        // ==========================================
+        // 4. SLICING TRAIL
+        // ==========================================
+
+        let trail = [];
+        let lastTrailPoint = null;
+        let lastHandUpdate = 0;
+
+        const TRAIL_MAX_POINTS = 18;
+        const TRAIL_LIFETIME = 180;
+        const TRAIL_MIN_DISTANCE = 2;
+
+        const SCORE_POPUP_LIFETIME = 800;
+
+        function resetTrail() {
+            trail = [];
+            lastTrailPoint = null;
+        }
+
+        // ==========================================
+        // 5. CANVAS RESIZE
+        // ==========================================
+
+        function resizeCanvas() {
+
+            const dpr = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
+
+            canvas.width = Math.round(innerWidth * dpr);
+            canvas.height = Math.round(innerHeight * dpr);
+
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        window.addEventListener("resize", resizeCanvas);
+
+        resizeCanvas();
+
+        // ==========================================
+        // 6. FRUIT SPAWNING
+        // ==========================================
+
+        function spawnFruit() {
+
+            const type = fruitTypes[
+                Math.floor(Math.random() * fruitTypes.length)
+            ];
+
+            fruits.push({
+
+                x: innerWidth * (
+                    0.15 + Math.random() * 0.7
+                ),
+
+                y: innerHeight + 70,
+
+                vx: (Math.random() - 0.5) * 4,
+
+                vy: -(11 + Math.random() * 4),
+
+                // Larger fruits for television gameplay.
+                radius: 48 + Math.random() * 16,
+
+                type,
+
+                rotation: Math.random() * Math.PI
+            });
+        }
+
+        // ==========================================
+        // 7. DRAW WHOLE FRUIT
+        // ==========================================
+
+        function drawFruit(fruit) {
+
+            ctx.save();
+
+            ctx.translate(fruit.x, fruit.y);
+            ctx.rotate(fruit.rotation);
+
+            ctx.font = `${fruit.radius * 2}px Arial`;
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            ctx.fillText(
+                fruit.type.emoji,
+                0,
+                0
+            );
+
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 8. COLLISION DETECTION
+        // ==========================================
+
+        function distancePointToSegment(
+            px, py,
+            x1, y1,
+            x2, y2
+        ) {
+
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+
+            const lengthSquared =
+                dx * dx + dy * dy;
+
+            if (lengthSquared === 0) {
+                return Math.hypot(
+                    px - x1,
+                    py - y1
+                );
+            }
+
+            let t = (
+                (px - x1) * dx +
+                (py - y1) * dy
+            ) / lengthSquared;
+
+            t = Math.max(0, Math.min(1, t));
+
+            const closestX = x1 + t * dx;
+            const closestY = y1 + t * dy;
+
+            return Math.hypot(
+                px - closestX,
+                py - closestY
+            );
+        }
+
+        function checkFruitCollision(start, end) {
+
+            if (!running) return;
+
+            const movementDistance = Math.hypot(
+                end.x - start.x,
+                end.y - start.y
+            );
+
+            if (movementDistance < 4) return;
+
+            for (let i = fruits.length - 1; i >= 0; i--) {
+
+                const fruit = fruits[i];
+
+                const distance = distancePointToSegment(
+                    fruit.x,
+                    fruit.y,
+                    start.x,
+                    start.y,
+                    end.x,
+                    end.y
+                );
+
+                // Slightly more forgiving collision area.
+                const collisionRadius =
+                    fruit.radius * 0.86 + 16;
+
+                if (distance <= collisionRadius) {
+
+                    fruits.splice(i, 1);
+
+                    sliceFruit(
+                        fruit,
+                        start,
+                        end
+                    );
+                }
+            }
+        }
+
+        // ==========================================
+        // 9. SLICE FRUIT
+        // ==========================================
+
+        function sliceFruit(fruit, start, end) {
+
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+
+            const swipeAngle = Math.atan2(dy, dx);
+
+            // Perpendicular direction to finger movement.
+            const normalX = -Math.sin(swipeAngle);
+            const normalY = Math.cos(swipeAngle);
+
+            score += 10;
+
+            scoreElement.textContent = score;
+
+            scorePopups.push({
+                x: fruit.x,
+                y: fruit.y,
+                text: "+10",
+                bornAt: performance.now()
+            });
+
+            pulseScore();
+
+            playSliceSound();
+            playScorePopSound();
+
+            // Create two moving halves.
+            for (const side of [-1, 1]) {
+
+                slicedPieces.push({
+
+                    x: fruit.x,
+                    y: fruit.y,
+
+                    vx:
+                        fruit.vx +
+                        normalX * side * 2.8,
+
+                    vy:
+                        fruit.vy +
+                        normalY * side * 2.8,
+
+                    radius: fruit.radius,
+
+                    emoji: fruit.type.emoji,
+                    color: fruit.type.color,
+
+                    rotation: fruit.rotation,
+
+                    cutAngle:
+                        swipeAngle - fruit.rotation,
+
+                    side,
+
+                    angularVelocity:
+                        (Math.random() - 0.5) * 0.16,
+
+                    life: 150
+                });
+            }
+
+            spawnSliceParticles(fruit);
+
+            console.log("Fruit sliced. Score:", score);
+        }
+
+        // ==========================================
+        // 10. DRAW SPLIT FRUIT
+        // ==========================================
+
+        function drawSlicedPiece(piece) {
+
+            ctx.save();
+
+            ctx.translate(piece.x, piece.y);
+
+            ctx.rotate(piece.rotation);
+            ctx.rotate(piece.cutAngle);
+
+            const radius = piece.radius;
+
+            // Clip each half on opposite sides
+            // of the slicing line.
+            ctx.beginPath();
+
+            if (piece.side < 0) {
+
+                ctx.rect(
+                    -radius * 1.5,
+                    -radius * 1.5,
+                    radius * 3,
+                    radius * 1.5
+                );
+
+            } else {
+
+                ctx.rect(
+                    -radius * 1.5,
+                    0,
+                    radius * 3,
+                    radius * 1.5
+                );
+            }
+
+            ctx.clip();
+
+            // Restore the fruit's original image angle.
+            ctx.rotate(-piece.cutAngle);
+
+            ctx.font = `${radius * 2}px Arial`;
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            ctx.fillText(
+                piece.emoji,
+                0,
+                0
+            );
+
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 11. UPDATE SPLIT FRUIT PHYSICS
+        // ==========================================
+
+        function updateSlicedPieces() {
+
+            for (
+                let i = slicedPieces.length - 1;
+                i >= 0;
+                i--
+            ) {
+
+                const piece = slicedPieces[i];
+
+                piece.x += piece.vx;
+                piece.y += piece.vy;
+
+                piece.vy += 0.22;
+                piece.vx *= 0.995;
+
+                piece.rotation += piece.angularVelocity;
+
+                piece.life--;
+
+                drawSlicedPiece(piece);
+
+                if (
+                    piece.life <= 0 ||
+                    piece.y > innerHeight + 180
+                ) {
+                    slicedPieces.splice(i, 1);
+                }
+            }
+        }
+
+        // ==========================================
+        // 12. SLICE PARTICLES
+        // ==========================================
+
+        function spawnSliceParticles(fruit) {
+
+            const particleCount = 14;
+
+            for (let i = 0; i < particleCount; i++) {
+
+                const angle =
+                    Math.random() * Math.PI * 2;
+
+                const speed =
+                    1 + Math.random() * 5;
+
+                particles.push({
+
+                    x: fruit.x,
+                    y: fruit.y,
+
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+
+                    radius: 2 + Math.random() * 4,
+
+                    color: fruit.type.color,
+
+                    life: 36
+                });
+            }
+        }
+
+        function updateParticles() {
+
+            for (
+                let i = particles.length - 1;
+                i >= 0;
+                i--
+            ) {
+
+                const particle = particles[i];
+
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+
+                particle.vy += 0.12;
+                particle.vx *= 0.98;
+
+                particle.life--;
+
+                ctx.save();
+
+                ctx.globalAlpha = Math.max(
+                    0,
+                    particle.life / 36
+                );
+
+                ctx.fillStyle = particle.color;
+
+                ctx.beginPath();
+
+                ctx.arc(
+                    particle.x,
+                    particle.y,
+                    particle.radius,
+                    0,
+                    Math.PI * 2
+                );
+
+                ctx.fill();
+
+                ctx.restore();
+
+                if (particle.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // ==========================================
+        // 13. UPDATE PHONE POSITION
+        // ==========================================
+
+        function updatePhonePosition(x, y) {
+
+            const now = performance.now();
+
+            // Reset after a long gap in tracking.
+            if (
+                !phoneMarkerVisible ||
+                now - lastHandUpdate > 300
+            ) {
+                resetTrail();
+            }
+
+            const previous = lastTrailPoint;
+
+            const point = {
+                x,
+                y,
+                time: now
+            };
+
+            if (previous) {
+
+                const distance = Math.hypot(
+                    point.x - previous.x,
+                    point.y - previous.y
+                );
+
+                if (distance >= TRAIL_MIN_DISTANCE) {
+
+                    checkFruitCollision(
+                        previous,
+                        point
+                    );
+
+                    trail.push(point);
+
+                    if (trail.length > TRAIL_MAX_POINTS) {
+                        trail.shift();
+                    }
+                }
+
+            } else {
+
+                trail.push(point);
+            }
+
+            lastTrailPoint = point;
+
+            phoneX = x;
+            phoneY = y;
+
+            lastHandUpdate = now;
+
+            phoneMarkerVisible = true;
+        }
+
+        // ==========================================
+        // 14. DRAW SLICING TRAIL
+        // ==========================================
+
+        function drawTrail(timestamp) {
+
+            if (trail.length === 0) return;
+
+            trail = trail.filter(
+                point =>
+                    timestamp - point.time < TRAIL_LIFETIME
+            );
+
+            if (trail.length === 0) {
+                lastTrailPoint = null;
+                return;
+            }
+
+            ctx.save();
+
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
+            for (let i = 1; i < trail.length; i++) {
+
+                const previous = trail[i - 1];
+                const current = trail[i];
+
+                const age = timestamp - current.time;
+
+                const opacity = Math.max(
+                    0,
+                    1 - age / TRAIL_LIFETIME
+                );
+
+                if (opacity <= 0) continue;
+
+                const progress = i / trail.length;
+
+                // Outer glow.
+                ctx.beginPath();
+
+                ctx.moveTo(previous.x, previous.y);
+                ctx.lineTo(current.x, current.y);
+
+                ctx.strokeStyle =
+                    `rgba(0,255,220,${opacity * 0.35})`;
+
+                ctx.lineWidth = 24 * progress;
+                ctx.shadowBlur = 25;
+                ctx.shadowColor = "#00ffee";
+
+                ctx.stroke();
+
+                // Inner blade.
+                ctx.beginPath();
+
+                ctx.moveTo(previous.x, previous.y);
+                ctx.lineTo(current.x, current.y);
+
+                ctx.strokeStyle =
+                    `rgba(100,255,245,${opacity})`;
+
+                ctx.lineWidth = 5 * progress;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = "#00ffff";
+
+                ctx.stroke();
+
+                // Bright centre.
+                ctx.beginPath();
+
+                ctx.moveTo(previous.x, previous.y);
+                ctx.lineTo(current.x, current.y);
+
+                ctx.strokeStyle =
+                    `rgba(255,255,255,${opacity * 0.9})`;
+
+                ctx.lineWidth = 2 * progress;
+                ctx.shadowBlur = 5;
+
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 15. DRAW FINGERTIP MARKER
+        // ==========================================
+
+        function drawPhoneMarker(timestamp) {
+
+            if (!phoneMarkerVisible) return;
+
+            if (timestamp - lastHandUpdate > 300) {
+
+                phoneMarkerVisible = false;
+
+                resetTrail();
+
+                return;
+            }
+
+            ctx.save();
+
+            ctx.beginPath();
+
+            ctx.arc(
+                phoneX,
+                phoneY,
+                32,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 3;
+
+            ctx.stroke();
+
+            ctx.beginPath();
+
+            ctx.arc(
+                phoneX,
+                phoneY,
+                13,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fillStyle = "#00ffcc";
+
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00ffcc";
+
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 16. MAIN GAME LOOP
+        // ==========================================
+
+        function loop(timestamp) {
+
+            ctx.clearRect(
+                0,
+                0,
+                innerWidth,
+                innerHeight
+            );
+
+            if (running) {
+
+                if (timestamp - lastSpawn > 850) {
+
+                    spawnFruit();
+
+                    lastSpawn = timestamp;
+                }
+
+                // Update whole fruits.
+                for (const fruit of fruits) {
+
+                    fruit.x += fruit.vx;
+                    fruit.y += fruit.vy;
+
+                    fruit.vy += 0.16;
+
+                    fruit.rotation += 0.015;
+
+                    drawFruit(fruit);
+                }
+
+                // Remove fruits that leave the screen.
+                fruits = fruits.filter(
+                    fruit => fruit.y < innerHeight + 120
+                );
+
+                updateSlicedPieces();
+                updateParticles();
+
+            } else {
+
+                // Welcome-screen animation.
+                const time = timestamp / 1000;
+
+                fruitTypes.forEach((type, i) => {
+
+                    const x =
+                        innerWidth * (0.18 + i * 0.16);
+
+                    const y =
+                        innerHeight * 0.72 +
+                        Math.sin(time * 2 + i) * 15;
+
+                    ctx.font = "48px Arial";
+
+                    ctx.textAlign = "center";
+
+                    ctx.fillText(
+                        type.emoji,
+                        x,
+                        y
+                    );
+                });
+            }
+
+            drawTrail(timestamp);
+            drawPhoneMarker(timestamp);
+            drawScorePopups(timestamp);
+
+            requestAnimationFrame(loop);
+        }
+
+        // ==========================================
+        // 17. SOUND & COUNTDOWN
+        // ==========================================
+
+        let audioContext = null;
+        let masterGain = null;
+        let lastSliceSoundAt = 0;
+        let countdownTimer = null;
+
+        function ensureAudio() {
+
+            if (!audioContext) {
+
+                const AudioContextClass =
+                    window.AudioContext ||
+                    window.webkitAudioContext;
+
+                if (!AudioContextClass) return null;
+
+                audioContext = new AudioContextClass();
+
+                masterGain = audioContext.createGain();
+                masterGain.gain.value = 0.3;
+                masterGain.connect(audioContext.destination);
+            }
+
+            if (audioContext.state === "suspended") {
+                audioContext.resume();
+            }
+
+            return audioContext;
+        }
+
+        function playTone(
+            startFrequency,
+            endFrequency,
+            duration,
+            volume,
+            type,
+            delay
+        ) {
+
+            const audio = ensureAudio();
+
+            if (!audio) return;
+
+            const now = audio.currentTime + (delay || 0);
+
+            const oscillator = audio.createOscillator();
+            const gain = audio.createGain();
+
+            oscillator.type = type || "sine";
+
+            oscillator.frequency.setValueAtTime(
+                startFrequency,
+                now
+            );
+
+            oscillator.frequency.exponentialRampToValueAtTime(
+                Math.max(1, endFrequency),
+                now + duration
+            );
+
+            gain.gain.setValueAtTime(0.0001, now);
+
+            gain.gain.exponentialRampToValueAtTime(
+                volume,
+                now + 0.012
+            );
+
+            gain.gain.exponentialRampToValueAtTime(
+                0.0001,
+                now + duration
+            );
+
+            oscillator.connect(gain);
+            gain.connect(masterGain);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration + 0.02);
+        }
+
+        // A short filtered noise sweep: the blade whoosh.
+        function playSliceSound() {
+
+            const now = performance.now();
+
+            if (now - lastSliceSoundAt < 45) return;
+
+            lastSliceSoundAt = now;
+
+            const audio = ensureAudio();
+
+            if (!audio) return;
+
+            const time = audio.currentTime;
+            const duration = 0.18;
+
+            const frameCount = Math.floor(
+                audio.sampleRate * duration
+            );
+
+            const buffer = audio.createBuffer(
+                1,
+                frameCount,
+                audio.sampleRate
+            );
+
+            const samples = buffer.getChannelData(0);
+
+            for (let i = 0; i < frameCount; i++) {
+                samples[i] =
+                    (Math.random() * 2 - 1) *
+                    (1 - i / frameCount);
+            }
+
+            const noise = audio.createBufferSource();
+            noise.buffer = buffer;
+
+            const filter = audio.createBiquadFilter();
+            filter.type = "bandpass";
+            filter.Q.value = 1.1;
+
+            filter.frequency.setValueAtTime(4200, time);
+
+            filter.frequency.exponentialRampToValueAtTime(
+                650,
+                time + duration
+            );
+
+            const gain = audio.createGain();
+
+            gain.gain.setValueAtTime(0.0001, time);
+
+            gain.gain.exponentialRampToValueAtTime(
+                0.55,
+                time + 0.015
+            );
+
+            gain.gain.exponentialRampToValueAtTime(
+                0.0001,
+                time + duration
+            );
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(masterGain);
+
+            noise.start(time);
+            noise.stop(time + duration);
+        }
+
+        // Two quick rising notes: the +10 sparkle.
+        function playScorePopSound() {
+
+            playTone(880, 1568, 0.14, 0.35);
+
+            playTone(1568, 2093, 0.12, 0.18, "sine", 0.045);
+        }
+
+        function playCountdownSound(isGo) {
+
+            if (isGo) {
+                playTone(880, 1320, 0.35, 0.4, "triangle");
+            } else {
+                playTone(520, 620, 0.16, 0.32, "triangle");
+            }
+        }
+
+        function pulseScore() {
+
+            scoreElement.classList.remove("pop");
+
+            // Force a reflow so the pulse can retrigger.
+            void scoreElement.offsetWidth;
+
+            scoreElement.classList.add("pop");
+
+            clearTimeout(pulseScore.timer);
+
+            pulseScore.timer = setTimeout(() => {
+                scoreElement.classList.remove("pop");
+            }, 180);
+        }
+
+        function drawScorePopups(timestamp) {
+
+            if (scorePopups.length === 0) return;
+
+            scorePopups = scorePopups.filter(
+                popup =>
+                    timestamp - popup.bornAt <
+                    SCORE_POPUP_LIFETIME
+            );
+
+            for (const popup of scorePopups) {
+
+                const progress =
+                    (timestamp - popup.bornAt) /
+                    SCORE_POPUP_LIFETIME;
+
+                const opacity = Math.max(0, 1 - progress);
+                const y = popup.y - progress * 80;
+
+                ctx.save();
+
+                ctx.globalAlpha = opacity;
+
+                ctx.font =
+                    `bold ${32 + progress * 14}px Arial`;
+
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = "rgba(25, 8, 35, 0.8)";
+                ctx.fillStyle = "#ffe66d";
+
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = "#ff9f43";
+
+                ctx.strokeText(popup.text, popup.x, y);
+                ctx.fillText(popup.text, popup.x, y);
+
+                ctx.restore();
+            }
+        }
+
+        function startCountdown(onComplete) {
+
+            const labels = ["3", "2", "1", "GO!"];
+
+            let index = 0;
+
+            function showNextLabel() {
+
+                if (index >= labels.length) {
+
+                    countdownElement.hidden = true;
+                    countdownElement.innerHTML = "";
+
+                    countdownTimer = null;
+
+                    onComplete();
+
+                    return;
+                }
+
+                const label = labels[index];
+                const isGo = label === "GO!";
+
+                countdownElement.hidden = false;
+
+                countdownElement.innerHTML =
+                    `<span${isGo ? ' class="go"' : ""}>` +
+                    `${label}</span>`;
+
+                playCountdownSound(isGo);
+
+                index++;
+
+                countdownTimer = setTimeout(
+                    showNextLabel,
+                    isGo ? 650 : 750
+                );
+            }
+
+            showNextLabel();
+        }
+
+        // ==========================================
+        // 18. START GAME
+        // ==========================================
+
+        startButton.addEventListener("click", () => {
+
+            // Unlock audio on this user gesture.
+            ensureAudio();
+
+            score = 0;
+
+            fruits = [];
+            slicedPieces = [];
+            particles = [];
+            scorePopups = [];
+
+            lastSpawn = 0;
+
+            scoreElement.textContent = score;
+
+            running = false;
+
+            resetTrail();
+
+            menu.style.display = "none";
+
+            statusElement.textContent = "Get ready!";
+
+            clearTimeout(countdownTimer);
+
+            startCountdown(() => {
+
+                running = true;
+
+                lastSpawn = 0;
+
+                statusElement.textContent = "Game running";
+            });
+        });
+
+        // ==========================================
+        // 19. START APPLICATION
+        // ==========================================
+
+        connectToServer();
+
+        requestAnimationFrame(loop);
+
+    </script>
+
+</body>
+</html>

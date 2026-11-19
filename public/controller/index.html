@@ -1,0 +1,1018 @@
+﻿
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Air Fruit Ninja Controller</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+            background: linear-gradient(145deg, #101642, #27105b);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 460px;
+            padding: 24px;
+            text-align: center;
+            border: 1px solid #ffffff30;
+            border-radius: 24px;
+            background: #ffffff12;
+        }
+
+        h1 {
+            color: #ffe66d;
+            font-size: 27px;
+        }
+
+        #status {
+            margin: 16px 0;
+            padding: 12px;
+            border-radius: 12px;
+            background: #ffffff15;
+            overflow-wrap: anywhere;
+            font-size: 14px;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            overflow: hidden;
+            border-radius: 16px;
+            background: #080b1b;
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+        }
+
+        #coordinates {
+            margin: 12px 0;
+            font-size: 14px;
+            color: #ffe66d;
+        }
+
+        #performance {
+            margin: 10px 0;
+            padding: 11px;
+            border-radius: 10px;
+            background: #00000030;
+            color: #8dffc4;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 14px;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            background: #ffe66d;
+            color: #171331;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .note {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #d8d9f5;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="card">
+
+        <h1>Air Fruit Ninja</h1>
+        <p>Phone Motion Controller</p>
+
+        <div id="status">
+            Connecting securely to game server...
+        </div>
+
+        <div class="camera-container">
+            <video id="camera" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+
+        <div id="coordinates">
+            Index fingertip: Not detected
+        </div>
+
+        <div id="performance">
+            FPS: -- | Inference: -- ms
+        </div>
+
+        <button id="connectButton">
+            Reconnect to Server
+        </button>
+
+        <button id="startCamera">
+            Start Camera & Hand Tracking
+        </button>
+
+        <button id="testMovement">
+            Send Test Movement
+        </button>
+
+        <p class="note">
+            Allow camera access when prompted. Keep your hand
+            visible in the camera frame. Hand tracking happens
+            locally on your phone.
+        </p>
+
+    </main>
+
+    <script type="module">
+
+        import {
+            FilesetResolver,
+            HandLandmarker
+        } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/vision_bundle.mjs";
+
+        // ==========================================
+        // 1. DOM ELEMENTS
+        // ==========================================
+
+        const camera = document.getElementById("camera");
+        const overlay = document.getElementById("overlay");
+        const ctx = overlay.getContext("2d", {
+            alpha: true
+        });
+
+        const status = document.getElementById("status");
+        const coordinates = document.getElementById("coordinates");
+        const performanceElement = document.getElementById("performance");
+
+        const startButton = document.getElementById("startCamera");
+        const connectButton = document.getElementById("connectButton");
+        const testButton = document.getElementById("testMovement");
+
+        // ==========================================
+        // 2. CONFIGURATION
+        // ==========================================
+
+        const SERVER_URL =
+            `wss://${window.location.hostname}:3000`;
+
+        const MODEL_URL = "/models/hand_landmarker.task";
+
+        const MAX_SOCKET_BUFFER = 8192;
+
+        // Landmark smoothing keeps the blade steady without
+        // adding noticeable lag.
+        const LANDMARK_SMOOTHING = 0.65;
+
+        // Thumb, index, middle, ring and pinky fingertips.
+        const FINGERTIP_IDS = [4, 8, 12, 16, 20];
+
+        const COORDINATE_UI_INTERVAL = 100;
+        const PERFORMANCE_UI_INTERVAL = 500;
+
+        // ==========================================
+        // 3. APPLICATION STATE
+        // ==========================================
+
+        let socket = null;
+        let reconnectTimer = null;
+
+        let cameraStream = null;
+        let handLandmarker = null;
+
+        let tracking = false;
+
+        let lastVideoTime = -1;
+        let lastDetectionTimestamp = 0;
+
+        let animationFrame = null;
+        let videoFrameCallbackId = null;
+
+        let lastCoordinatesUpdate = 0;
+        let lastPerformanceUpdate = 0;
+
+        let lastHandDetected = false;
+
+        let smoothedLandmarks = null;
+
+        let fpsWindowStart = 0;
+        let fpsFrameCount = 0;
+        let displayedFPS = 0;
+
+        let averageInference = 0;
+
+        // ==========================================
+        // 4. UI HELPERS
+        // ==========================================
+
+        function setStatus(message) {
+            if (status.textContent !== message) {
+                status.textContent = message;
+            }
+        }
+
+        function setCoordinates(message) {
+            const now = performance.now();
+
+            if (
+                now - lastCoordinatesUpdate <
+                COORDINATE_UI_INTERVAL
+            ) {
+                return;
+            }
+
+            coordinates.textContent = message;
+            lastCoordinatesUpdate = now;
+        }
+
+        // ==========================================
+        // 5. WEBSOCKET CONNECTION
+        // ==========================================
+
+        function connectToServer() {
+
+            if (
+                socket &&
+                (
+                    socket.readyState === WebSocket.OPEN ||
+                    socket.readyState === WebSocket.CONNECTING
+                )
+            ) {
+                return;
+            }
+
+            setStatus("Connecting securely to game server...");
+
+            const currentSocket = new WebSocket(SERVER_URL);
+
+            socket = currentSocket;
+
+            currentSocket.addEventListener("open", () => {
+
+                if (socket !== currentSocket) return;
+
+                clearTimeout(reconnectTimer);
+
+                console.log("Secure WebSocket connected");
+
+                setStatus(
+                    tracking
+                        ? "Connected. Hand tracking active."
+                        : "Connected securely. Ready for camera."
+                );
+            });
+
+            currentSocket.addEventListener("message", (event) => {
+
+                if (socket !== currentSocket) return;
+
+                try {
+                    const message = JSON.parse(event.data);
+
+                    if (message.type === "CONNECTED") {
+                        console.log("Game server connection confirmed");
+                    }
+
+                } catch (error) {
+                    console.error("Invalid server message:", error);
+                }
+            });
+
+            currentSocket.addEventListener("error", (error) => {
+
+                console.error("WebSocket error:", error);
+
+                if (socket === currentSocket) {
+                    setStatus(
+                        "WebSocket error. Check server and certificate."
+                    );
+                }
+            });
+
+            currentSocket.addEventListener("close", () => {
+
+                if (socket !== currentSocket) return;
+
+                console.log("WebSocket disconnected");
+
+                if (tracking) {
+                    setStatus("Server disconnected. Reconnecting...");
+                } else {
+                    setStatus("Disconnected. Reconnecting...");
+                }
+
+                clearTimeout(reconnectTimer);
+
+                reconnectTimer = setTimeout(() => {
+                    if (socket === currentSocket) {
+                        socket = null;
+                        connectToServer();
+                    }
+                }, 1500);
+            });
+        }
+
+        function reconnectManually() {
+
+            clearTimeout(reconnectTimer);
+
+            const oldSocket = socket;
+            socket = null;
+
+            if (oldSocket) {
+                oldSocket.close();
+            }
+
+            connectToServer();
+        }
+
+        connectButton.addEventListener(
+            "click",
+            reconnectManually
+        );
+
+        // ==========================================
+        // 6. MEDIA PIPE INITIALIZATION
+        // ==========================================
+
+        async function initializeHandLandmarker() {
+
+            setStatus("Loading MediaPipe model...");
+
+            const vision = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/wasm"
+            );
+
+            const options = {
+                runningMode: "VIDEO",
+                numHands: 1
+            };
+
+            // Try GPU first.
+            try {
+
+                handLandmarker =
+                    await HandLandmarker.createFromOptions(
+                        vision,
+                        {
+                            ...options,
+                            baseOptions: {
+                                modelAssetPath: MODEL_URL,
+                                delegate: "GPU"
+                            }
+                        }
+                    );
+
+                console.log("MediaPipe GPU delegate initialized");
+
+            } catch (gpuError) {
+
+                console.warn(
+                    "GPU initialization failed. Falling back to default processing.",
+                    gpuError
+                );
+
+                // Default processing is used as the fallback.
+                handLandmarker =
+                    await HandLandmarker.createFromOptions(
+                        vision,
+                        {
+                            ...options,
+                            baseOptions: {
+                                modelAssetPath: MODEL_URL
+                            }
+                        }
+                    );
+
+                console.log("MediaPipe fallback initialized");
+            }
+        }
+
+        // ==========================================
+        // 7. CAMERA INITIALIZATION
+        // ==========================================
+
+        async function initializeCamera() {
+
+            if (cameraStream) {
+                return;
+            }
+
+            if (!navigator.mediaDevices?.getUserMedia) {
+                throw new Error(
+                    "Camera API unavailable. HTTPS and certificate trust are required."
+                );
+            }
+
+            setStatus("Starting phone camera...");
+
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+
+                video: {
+                    facingMode: {
+                        ideal: "user"
+                    },
+
+                    // Lower resolution reduces inference workload.
+                    width: {
+                        ideal: 480
+                    },
+
+                    height: {
+                        ideal: 360
+                    },
+
+                    // Aim for stable 30 FPS.
+                    frameRate: {
+                        ideal: 30,
+                        max: 30
+                    }
+                }
+            });
+
+            camera.srcObject = cameraStream;
+
+            await camera.play();
+
+            const settings =
+                cameraStream.getVideoTracks()[0].getSettings();
+
+            console.log("Camera settings:", {
+                width: settings.width,
+                height: settings.height,
+                frameRate: settings.frameRate
+            });
+        }
+
+        // ==========================================
+        // 8. CANVAS SETUP
+        // ==========================================
+
+        function resizeOverlay() {
+
+            const width = camera.videoWidth;
+            const height = camera.videoHeight;
+
+            if (!width || !height) return;
+
+            if (
+                overlay.width !== width ||
+                overlay.height !== height
+            ) {
+
+                overlay.width = width;
+                overlay.height = height;
+            }
+        }
+
+        // ==========================================
+        // 9. DRAW HAND LANDMARKS
+        // ==========================================
+
+        function drawHand(landmarks) {
+
+            ctx.clearRect(
+                0,
+                0,
+                overlay.width,
+                overlay.height
+            );
+
+            if (!landmarks) return;
+
+            const connections =
+                HandLandmarker.HAND_CONNECTIONS;
+
+            ctx.lineWidth = Math.max(
+                2,
+                overlay.width / 220
+            );
+
+            ctx.strokeStyle = "#55ff9b";
+
+            for (const connection of connections) {
+
+                const start =
+                    landmarks[connection.start];
+
+                const end =
+                    landmarks[connection.end];
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    start.x * overlay.width,
+                    start.y * overlay.height
+                );
+
+                ctx.lineTo(
+                    end.x * overlay.width,
+                    end.y * overlay.height
+                );
+
+                ctx.stroke();
+            }
+
+            // Index fingertip: landmark 8.
+            const tip = landmarks[8];
+
+            const x = tip.x * overlay.width;
+            const y = tip.y * overlay.height;
+
+            ctx.beginPath();
+
+            ctx.arc(
+                x,
+                y,
+                Math.max(8, overlay.width / 40),
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fillStyle = "#ffe66d";
+            ctx.fill();
+
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#ffffff";
+            ctx.stroke();
+        }
+
+        // ==========================================
+        // 10. SEND MOVEMENT TO GAME
+        // ==========================================
+
+        function sendMovement(x, y, fingertips) {
+
+            if (
+                !socket ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+                return;
+            }
+
+            // Skip an update rather than queueing stale
+            // coordinates if the socket is congested.
+            if (socket.bufferedAmount > MAX_SOCKET_BUFFER) {
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: "MOVEMENT_TEST",
+                hand_detected: true,
+                x,
+                y,
+
+                // Extra fingertips let the game grow into
+                // multi-finger slicing later.
+                fingertips,
+
+                timestamp: Date.now()
+            }));
+        }
+
+        function sendHandLost() {
+
+            if (
+                !socket ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+                return;
+            }
+
+            if (socket.bufferedAmount > MAX_SOCKET_BUFFER) {
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                type: "MOVEMENT_TEST",
+                hand_detected: false,
+                timestamp: Date.now()
+            }));
+        }
+
+        // ==========================================
+        // 11. PERFORMANCE MEASUREMENTS
+        // ==========================================
+
+        function updatePerformance(now, inferenceTime) {
+
+            fpsFrameCount++;
+
+            if (averageInference === 0) {
+                averageInference = inferenceTime;
+            } else {
+                averageInference =
+                    averageInference * 0.8 +
+                    inferenceTime * 0.2;
+            }
+
+            if (fpsWindowStart === 0) {
+                fpsWindowStart = now;
+            }
+
+            const elapsed = now - fpsWindowStart;
+
+            if (elapsed >= 1000) {
+
+                displayedFPS =
+                    fpsFrameCount * 1000 / elapsed;
+
+                fpsFrameCount = 0;
+                fpsWindowStart = now;
+            }
+
+            if (
+                now - lastPerformanceUpdate >=
+                PERFORMANCE_UI_INTERVAL
+            ) {
+
+                performanceElement.textContent =
+                    `FPS: ${displayedFPS.toFixed(0)} | ` +
+                    `Inference: ${averageInference.toFixed(1)} ms`;
+
+                lastPerformanceUpdate = now;
+            }
+        }
+
+        // ==========================================
+        // 12. TRACKING HELPERS
+        // ==========================================
+
+        function smoothLandmarks(rawLandmarks, previous) {
+
+            if (
+                !previous ||
+                previous.length !== rawLandmarks.length
+            ) {
+                return rawLandmarks.map(point => ({
+                    x: point.x,
+                    y: point.y,
+                    z: point.z
+                }));
+            }
+
+            for (let i = 0; i < rawLandmarks.length; i++) {
+
+                const raw = rawLandmarks[i];
+                const smoothed = previous[i];
+
+                smoothed.x +=
+                    (raw.x - smoothed.x) * LANDMARK_SMOOTHING;
+
+                smoothed.y +=
+                    (raw.y - smoothed.y) * LANDMARK_SMOOTHING;
+
+                smoothed.z +=
+                    (raw.z - smoothed.z) * LANDMARK_SMOOTHING;
+            }
+
+            return previous;
+        }
+
+        // Mirrored for the selfie camera, clamped to 0..1.
+        function toGamePoint(landmark) {
+
+            return {
+                x: 1 - Math.max(
+                    0,
+                    Math.min(1, landmark.x)
+                ),
+
+                y: Math.max(
+                    0,
+                    Math.min(1, landmark.y)
+                )
+            };
+        }
+
+        // ==========================================
+        // 13. PROCESS ONE CAMERA FRAME
+        // ==========================================
+
+        function processVideoFrame() {
+
+            if (
+                !tracking ||
+                !handLandmarker ||
+                camera.readyState <
+                    HTMLMediaElement.HAVE_CURRENT_DATA
+            ) {
+                return;
+            }
+
+            if (camera.currentTime === lastVideoTime) {
+                return;
+            }
+
+            lastVideoTime = camera.currentTime;
+
+            resizeOverlay();
+
+            const startTime = performance.now();
+
+            // MediaPipe expects a monotonically increasing
+            // timestamp in milliseconds.
+            const mediaPipeTimestamp = Math.max(
+                performance.now(),
+                lastDetectionTimestamp + 1
+            );
+
+            lastDetectionTimestamp = mediaPipeTimestamp;
+
+            try {
+
+                const result = handLandmarker.detectForVideo(
+                    camera,
+                    mediaPipeTimestamp
+                );
+
+                const inferenceTime =
+                    performance.now() - startTime;
+
+                const now = performance.now();
+
+                updatePerformance(now, inferenceTime);
+
+                if (
+                    result.landmarks &&
+                    result.landmarks.length > 0
+                ) {
+
+                    const rawLandmarks = result.landmarks[0];
+
+                    smoothedLandmarks = smoothLandmarks(
+                        rawLandmarks,
+                        smoothedLandmarks
+                    );
+
+                    drawHand(smoothedLandmarks);
+
+                    // Landmark 8 = index fingertip.
+                    const tip = toGamePoint(
+                        smoothedLandmarks[8]
+                    );
+
+                    const fingertips = FINGERTIP_IDS.map(id => {
+
+                        const point = toGamePoint(
+                            smoothedLandmarks[id]
+                        );
+
+                        return {
+                            id,
+                            x: point.x,
+                            y: point.y
+                        };
+                    });
+
+                    // Send movement continuously.
+                    sendMovement(
+                        tip.x,
+                        tip.y,
+                        fingertips
+                    );
+
+                    setCoordinates(
+                        `Index fingertip — X: ${tip.x.toFixed(3)}, Y: ${tip.y.toFixed(3)}`
+                    );
+
+                    if (!lastHandDetected) {
+                        setStatus("Hand detected. Tracking active.");
+                    }
+
+                    lastHandDetected = true;
+
+                } else {
+
+                    drawHand(null);
+
+                    smoothedLandmarks = null;
+
+                    setCoordinates(
+                        "Index fingertip: Not detected"
+                    );
+
+                    if (lastHandDetected) {
+                        setStatus(
+                            "Show your hand to the camera."
+                        );
+
+                        sendHandLost();
+                    }
+
+                    lastHandDetected = false;
+                }
+
+            } catch (error) {
+
+                console.error("Hand tracking error:", error);
+
+                setStatus(
+                    "Hand-tracking error. Check browser console."
+                );
+            }
+        }
+
+        // ==========================================
+        // 14. SCHEDULE TRACKING FRAMES
+        // ==========================================
+
+        function scheduleTrackingFrame() {
+
+            if (!tracking) return;
+
+            // Prefer callbacks tied to actual video frames.
+            // This avoids unnecessary processing cycles.
+            if (
+                typeof camera.requestVideoFrameCallback ===
+                "function"
+            ) {
+
+                videoFrameCallbackId =
+                    camera.requestVideoFrameCallback(() => {
+
+                        if (!tracking) return;
+
+                        processVideoFrame();
+
+                        scheduleTrackingFrame();
+                    });
+
+            } else {
+
+                // Fallback for browsers without video-frame callbacks.
+                animationFrame = requestAnimationFrame(() => {
+
+                    if (!tracking) return;
+
+                    processVideoFrame();
+
+                    scheduleTrackingFrame();
+                });
+            }
+        }
+
+        // ==========================================
+        // 15. START HAND TRACKING
+        // ==========================================
+
+        startButton.addEventListener("click", async () => {
+
+            startButton.disabled = true;
+
+            try {
+
+                await initializeCamera();
+
+                if (!handLandmarker) {
+                    await initializeHandLandmarker();
+                }
+
+                tracking = true;
+
+                lastVideoTime = -1;
+                lastDetectionTimestamp = 0;
+
+                lastHandDetected = false;
+                smoothedLandmarks = null;
+
+                fpsWindowStart = 0;
+                fpsFrameCount = 0;
+                displayedFPS = 0;
+                averageInference = 0;
+
+                performanceElement.textContent =
+                    "Starting tracking measurements...";
+
+                startButton.textContent =
+                    "Hand Tracking Active";
+
+                setStatus(
+                    "Camera ready. Show your hand."
+                );
+
+                scheduleTrackingFrame();
+
+            } catch (error) {
+
+                console.error(
+                    "Camera or tracking initialization error:",
+                    error
+                );
+
+                setStatus(
+                    "Initialization error: " + error.message
+                );
+
+                startButton.disabled = false;
+
+                startButton.textContent =
+                    "Retry Camera & Hand Tracking";
+            }
+        });
+
+        // ==========================================
+        // 16. TEST MOVEMENT
+        // ==========================================
+
+        testButton.addEventListener("click", () => {
+
+            if (
+                !socket ||
+                socket.readyState !== WebSocket.OPEN
+            ) {
+
+                setStatus(
+                    "Not connected. Reconnect to the server first."
+                );
+
+                return;
+            }
+
+            sendMovement(0.5, 0.5);
+
+            setStatus("Test movement sent to game.");
+        });
+
+        // ==========================================
+        // 17. CLEANUP
+        // ==========================================
+
+        window.addEventListener("beforeunload", () => {
+
+            tracking = false;
+
+            clearTimeout(reconnectTimer);
+
+            if (animationFrame !== null) {
+                cancelAnimationFrame(animationFrame);
+            }
+
+            if (
+                videoFrameCallbackId !== null &&
+                typeof camera.cancelVideoFrameCallback === "function"
+            ) {
+                camera.cancelVideoFrameCallback(
+                    videoFrameCallbackId
+                );
+            }
+
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => {
+                    track.stop();
+                });
+            }
+
+            if (handLandmarker) {
+                handLandmarker.close();
+            }
+
+            if (socket) {
+                socket.close();
+            }
+        });
+
+        // ==========================================
+        // 18. INITIAL CONNECTION
+        // ==========================================
+
+        connectToServer();
+
+    </script>
+</body>
+</html>

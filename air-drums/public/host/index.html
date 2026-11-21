@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0504">
+    <title>Air Dhol — Stage</title>
+    <link rel="stylesheet" href="/host/style.css">
+</head>
+<body>
+    <canvas id="stage" aria-label="Virtual dhol stage"></canvas>
+
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-name">AIR DHOL</span>
+            <span class="brand-sub">hand-played dhol</span>
+        </div>
+
+        <div class="status-group">
+            <div class="status-pill">
+                <span id="statusDot" class="dot"></span>
+                <span id="statusText">Stage idle</span>
+            </div>
+            <div class="status-pill quiet">Room <strong id="roomLabel">main</strong></div>
+        </div>
+    </header>
+
+    <div id="guide" class="guide" hidden aria-hidden="true">
+        <span class="bol" data-beat="0">DHA</span>
+        <span class="bol" data-beat="1">GE</span>
+        <span class="bol" data-beat="2">NA</span>
+        <span class="bol" data-beat="3">TI</span>
+    </div>
+
+    <section class="hud hud-left">
+        <div class="panel">
+            <div class="panel-title">STAGE</div>
+
+            <label class="control">
+                <span class="control-label">Volume</span>
+                <input id="volume" type="range" min="0" max="100" value="75">
+                <span id="volumeValue" class="control-value">75</span>
+            </label>
+
+            <label class="control switch-row">
+                <span class="control-label">Metronome</span>
+                <span class="switch">
+                    <input id="metronome" type="checkbox">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                </span>
+            </label>
+
+            <label class="control">
+                <span class="control-label">Tempo</span>
+                <input id="bpm" type="range" min="60" max="180" value="96">
+                <span id="bpmValue" class="control-value">96</span>
+            </label>
+
+            <div class="panel-actions">
+                <button id="pairPhone" type="button">Pair phone</button>
+                <button id="testSound" type="button">Test sound</button>
+                <button id="fullscreen" type="button">Fullscreen</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="hud hud-right">
+        <div class="stats">
+            <div class="stat">
+                <span class="stat-label">HITS</span>
+                <strong id="hitCount">0</strong>
+            </div>
+            <div class="stat">
+                <span class="stat-label">STREAK</span>
+                <strong id="combo" class="combo">x0</strong>
+            </div>
+            <div class="stat">
+                <span class="stat-label">PLAYERS</span>
+                <strong id="controllerCount">0</strong>
+            </div>
+        </div>
+    </section>
+
+    <div class="legend">
+        <span class="legend-item bass"><i></i>LEFT HAND · BASS</span>
+        <span class="legend-item treble"><i></i>RIGHT HAND · TREBLE</span>
+    </div>
+
+    <div id="welcome" class="welcome">
+        <div class="welcome-inner">
+            <p class="eyebrow">THE HAND-PLAYED DHOL</p>
+            <h1>AIR <span>DHOL</span></h1>
+            <p class="lede">
+                Two hands. Two heads. No sticks required.
+                Open the controller on your phone, allow the camera,
+                and strike down to play the dhol.
+            </p>
+
+            <div class="pairing">
+                <div>
+                    <span>PHONE CONTROLLER</span>
+                    <strong id="controllerUrl">Loading link...</strong>
+                </div>
+                <div>
+                    <span>ROOM</span>
+                    <strong id="welcomeRoom">main</strong>
+                </div>
+            </div>
+
+            <button id="startStage" class="primary" type="button">START THE STAGE</button>
+
+            <p class="hint">
+                Use speakers or headphones. On your phone, accept the
+                certificate warning to enable the camera.
+            </p>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <script type="module" src="/host/host.js"></script>
+</body>
+</html>

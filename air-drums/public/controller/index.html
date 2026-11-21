@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0504">
+    <title>Air Dhol — Controller</title>
+    <link rel="stylesheet" href="/controller/style.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="head">
+            <div class="title-block">
+                <p class="eyebrow">AIR DHOL</p>
+                <h1>Controller</h1>
+            </div>
+            <div id="serverPill" class="pill">
+                <span id="serverDot" class="dot"></span>
+                <span id="serverText">Connecting</span>
+            </div>
+        </header>
+
+        <div id="status" class="status">
+            Connecting securely to the stage...
+        </div>
+
+        <div id="cameraFrame" class="camera-frame">
+            <video id="camera" autoplay playsinline muted></video>
+            <canvas id="overlay" width="480" height="360"></canvas>
+
+            <div id="calibrationBanner" class="calibration" hidden>
+                <div class="calibration-copy">
+                    <strong>CALIBRATING</strong>
+                    <span>Strike down 3 or 4 times with each hand</span>
+                </div>
+                <div class="calibration-progress">
+                    <i id="calibrationProgress"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="metrics">
+            <div class="metric">
+                <span>FPS</span>
+                <strong id="fps">--</strong>
+            </div>
+            <div class="metric">
+                <span>INFERENCE</span>
+                <strong id="inference">-- ms</strong>
+            </div>
+            <div class="metric">
+                <span>HANDS</span>
+                <strong id="handCount">0</strong>
+            </div>
+        </div>
+
+        <div class="strike-readout" aria-label="Live downward strike speed">
+            <div class="strike-row">
+                <span>L</span>
+                <div class="strike-track">
+                    <i id="leftStrikeFill"></i>
+                    <b></b>
+                </div>
+                <strong id="leftStrikeValue">0.0</strong>
+            </div>
+            <div class="strike-row">
+                <span>R</span>
+                <div class="strike-track">
+                    <i id="rightStrikeFill"></i>
+                    <b></b>
+                </div>
+                <strong id="rightStrikeValue">0.0</strong>
+            </div>
+            <p>Downward speed. A hit fires when a bar passes its mark.</p>
+        </div>
+
+        <button id="startCamera" class="primary" type="button">START CAMERA</button>
+
+        <section class="tuning">
+            <div class="tuning-head">
+                <span>Sensitivity</span>
+                <strong id="sensitivityValue">x1.0</strong>
+            </div>
+            <input id="sensitivity" type="range" min="0.5" max="2" step="0.1" value="1">
+
+            <div class="tuning-actions">
+                <button id="calibrate" class="ghost" type="button" disabled>Calibrate</button>
+                <button id="testHit" class="ghost" type="button">Test hit</button>
+                <button id="reconnect" class="ghost" type="button">Reconnect</button>
+                <button id="resetTuning" class="ghost" type="button">Reset tuning</button>
+            </div>
+
+            <p id="thresholds" class="thresholds">
+                Strike threshold — L 0.75 / R 0.75
+            </p>
+        </section>
+
+        <p class="note">
+            Allow camera access when prompted. Keep both hands in frame.
+            The left side plays the bass head; the right side plays the treble head.
+            For a hit, snap your fingertips downward and watch the L/R speed bars.
+            Press Reset tuning if strikes still do not register.
+        </p>
+    </main>
+
+    <script type="module" src="/controller/controller.js"></script>
+</body>
+</html>

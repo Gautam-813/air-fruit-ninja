@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0a0504">
+    <title>Air Dhol</title>
+    <style>
+        :root {
+            --bg: #0a0504;
+            --gold: #ffcf85;
+            --amber: #ffab4a;
+            --teal: #67e8e8;
+            --cream: #fff3df;
+            --muted: rgba(255, 243, 223, 0.56);
+            --border: rgba(255, 207, 133, 0.18);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            min-height: 100dvh;
+            padding: max(30px, env(safe-area-inset-top)) 22px max(30px, env(safe-area-inset-bottom));
+            color: var(--cream);
+            font-family: "Trebuchet MS", "Segoe UI", Verdana, sans-serif;
+            background:
+                radial-gradient(circle at 50% -10%, rgba(255, 159, 67, 0.18), transparent 45%),
+                radial-gradient(circle at 50% 110%, rgba(103, 232, 232, 0.08), transparent 50%),
+                linear-gradient(160deg, #150906, #070302 70%);
+            display: grid;
+            place-items: center;
+        }
+
+        main {
+            width: min(980px, 100%);
+        }
+
+        .eyebrow {
+            margin: 0 0 12px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4em;
+            color: rgba(255, 207, 133, 0.68);
+        }
+
+        h1 {
+            margin: 0;
+            text-align: center;
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(46px, 8vw, 96px);
+            line-height: 1;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            color: var(--cream);
+            text-shadow: 0 20px 70px rgba(255, 120, 30, 0.22);
+        }
+
+        h1 span {
+            background: linear-gradient(180deg, #ffe6b8, #ffb454 48%, #c96f1e);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .lede {
+            max-width: 620px;
+            margin: 18px auto 0;
+            text-align: center;
+            font-size: clamp(13px, 1.6vw, 16px);
+            line-height: 1.65;
+            color: var(--muted);
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 34px 0 0;
+        }
+
+        .card {
+            position: relative;
+            display: block;
+            padding: 24px;
+            min-height: 210px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background:
+                radial-gradient(circle at 100% 0%, rgba(255, 159, 67, 0.12), transparent 45%),
+                linear-gradient(150deg, rgba(40, 20, 12, 0.9), rgba(14, 6, 4, 0.96));
+            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.45);
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .card.phone {
+            background:
+                radial-gradient(circle at 100% 0%, rgba(103, 232, 232, 0.1), transparent 45%),
+                linear-gradient(150deg, rgba(14, 30, 30, 0.9), rgba(5, 12, 12, 0.96));
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 207, 133, 0.4);
+            box-shadow: 0 34px 90px rgba(0, 0, 0, 0.55);
+        }
+
+        .card:focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: 4px;
+        }
+
+        .card-kicker {
+            display: block;
+            margin-bottom: 16px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.26em;
+            color: rgba(255, 207, 133, 0.55);
+        }
+
+        .card.phone .card-kicker {
+            color: rgba(103, 232, 232, 0.6);
+        }
+
+        .card h2 {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(26px, 3.2vw, 38px);
+            font-weight: 700;
+            color: var(--cream);
+        }
+
+        .card p {
+            margin: 10px 0 0;
+            max-width: 290px;
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--muted);
+        }
+
+        .arrow {
+            position: absolute;
+            right: 24px;
+            bottom: 20px;
+            font-size: 26px;
+            line-height: 1;
+            color: rgba(255, 207, 133, 0.6);
+            transition: transform 0.2s, color 0.2s;
+        }
+
+        .card.phone .arrow {
+            color: rgba(103, 232, 232, 0.65);
+        }
+
+        .card:hover .arrow {
+            transform: translateX(4px);
+            color: var(--gold);
+        }
+
+        .card.phone:hover .arrow {
+            color: var(--teal);
+        }
+
+        .pair {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 18px;
+            padding: 14px 18px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 243, 223, 0.09);
+            background: rgba(255, 243, 223, 0.035);
+        }
+
+        .pair-text {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .pair span {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            color: rgba(255, 243, 223, 0.35);
+        }
+
+        .pair strong {
+            display: block;
+            overflow-wrap: anywhere;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 243, 223, 0.8);
+        }
+
+        .pair button {
+            flex: 0 0 auto;
+            padding: 9px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 207, 133, 0.25);
+            background: rgba(255, 207, 133, 0.07);
+            color: var(--gold);
+            font: inherit;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .pair button:hover {
+            background: rgba(255, 207, 133, 0.16);
+            border-color: rgba(255, 207, 133, 0.45);
+        }
+
+        .note {
+            margin: 18px 0 0;
+            text-align: center;
+            font-size: 11px;
+            line-height: 1.6;
+            color: rgba(255, 243, 223, 0.32);
+        }
+
+        @media (max-width: 700px) {
+            .cards {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                min-height: 180px;
+            }
+
+            .pair {
+                flex-direction: column;
+                align-items: stretch;
+                text-align: center;
+            }
+
+            .pair button {
+                width: 100%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                transition-duration: 0.001ms !important;
+                animation-duration: 0.001ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <p class="eyebrow">A HAND-PLAYED DHOL FOR EVERYONE</p>
+        <h1>AIR <span>DHOL</span></h1>
+        <p class="lede">
+            Open the stage on your laptop or TV, then turn your phone into
+            a pair of air sticks. No hardware. No experience required.
+        </p>
+
+        <div class="cards">
+            <a class="card" href="/host/">
+                <span class="card-kicker">LAPTOP · TV · SPEAKERS</span>
+                <h2>Open the Stage</h2>
+                <p>The dhol, the synthesized sound, the lights, and the live hand sticks.</p>
+                <span class="arrow" aria-hidden="true">&#8594;</span>
+            </a>
+
+            <a class="card phone" href="/controller/">
+                <span class="card-kicker">PHONE · CAMERA</span>
+                <h2>Pick Up the Sticks</h2>
+                <p>Two-hand tracking, bass and treble zones, calibration, and haptic hits.</p>
+                <span class="arrow" aria-hidden="true">&#8594;</span>
+            </a>
+        </div>
+
+        <div class="pair">
+            <div class="pair-text">
+                <span>PHONE LINK · SAME WI-FI</span>
+                <strong id="phoneLink">Loading...</strong>
+            </div>
+            <button id="copyLink" type="button">Copy link</button>
+        </div>
+
+        <p class="note">
+            On your phone, accept the certificate warning to enable the camera.
+            Use speakers or headphones for the best sound.
+        </p>
+    </main>
+
+    <script type="module">
+        const phoneLink = document.getElementById("phoneLink");
+        const copyLink = document.getElementById("copyLink");
+
+        let controllerUrl = "";
+
+        try {
+            const response = await fetch("/health");
+            const info = await response.json();
+
+            controllerUrl = `https://${info.ip}:${info.port}/controller/`;
+            phoneLink.textContent = controllerUrl;
+        } catch (error) {
+            phoneLink.textContent = "Open /controller/ on your phone";
+        }
+
+        copyLink.addEventListener("click", async () => {
+            if (!controllerUrl) return;
+
+            try {
+                await navigator.clipboard.writeText(controllerUrl);
+                copyLink.textContent = "Copied";
+                window.setTimeout(() => {
+                    copyLink.textContent = "Copy link";
+                }, 1600);
+            } catch (error) {
+                phoneLink.textContent = controllerUrl;
+            }
+        });
+    </script>
+</body>
+</html>

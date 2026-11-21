@@ -1,0 +1,25 @@
+{
+  "name": "air-drums",
+  "version": "0.1.0",
+  "description": "Hand-played virtual dhol and band instruments",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node tests/hit-detector.test.mjs"
+  },
+  "keywords": [
+    "dhol",
+    "web-audio",
+    "mediapipe",
+    "websocket"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0",
+    "express": "^5.3.0",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
